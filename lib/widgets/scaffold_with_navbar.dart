@@ -10,10 +10,7 @@ import '../core/l10n/app_localizations.dart'; // Jangan lupa import ini
 class ScaffoldWithNavBar extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
 
-  const ScaffoldWithNavBar({
-    required this.navigationShell,
-    super.key,
-  });
+  const ScaffoldWithNavBar({required this.navigationShell, super.key});
 
   void _goBranch(int index) {
     navigationShell.goBranch(
@@ -50,14 +47,18 @@ class ScaffoldWithNavBar extends StatelessWidget {
           destinations: [
             NavigationDestination(
               icon: const Icon(Icons.home_outlined),
-              selectedIcon:
-                  const Icon(Icons.home_rounded, color: AppColors.primary),
+              selectedIcon: const Icon(
+                Icons.home_rounded,
+                color: AppColors.primary,
+              ),
               label: l10n.home,
             ),
             NavigationDestination(
               icon: const Icon(Icons.people_outline),
-              selectedIcon:
-                  const Icon(Icons.people_rounded, color: AppColors.primary),
+              selectedIcon: const Icon(
+                Icons.people_rounded,
+                color: AppColors.primary,
+              ),
               label: l10n.patients,
             ),
             NavigationDestination(
@@ -69,8 +70,10 @@ class ScaffoldWithNavBar extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.secondaryDark, width: 2),
                 ),
-                child: const Icon(Icons.document_scanner_outlined,
-                    color: AppColors.secondaryDark),
+                child: const Icon(
+                  Icons.document_scanner_outlined,
+                  color: AppColors.secondaryDark,
+                ),
               ),
               selectedIcon: Container(
                 height: 48,
@@ -85,14 +88,18 @@ class ScaffoldWithNavBar extends StatelessWidget {
             ),
             NavigationDestination(
               icon: const Icon(Icons.history_outlined),
-              selectedIcon:
-                  const Icon(Icons.history_rounded, color: AppColors.primary),
+              selectedIcon: const Icon(
+                Icons.history_rounded,
+                color: AppColors.primary,
+              ),
               label: l10n.history,
             ),
             NavigationDestination(
               icon: const Icon(Icons.person_outline),
-              selectedIcon:
-                  const Icon(Icons.person_rounded, color: AppColors.primary),
+              selectedIcon: const Icon(
+                Icons.person_rounded,
+                color: AppColors.primary,
+              ),
               label: l10n.profile,
             ),
           ],

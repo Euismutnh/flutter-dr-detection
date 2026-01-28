@@ -31,25 +31,17 @@ void main() async {
   final languageProvider = LanguageProvider();
   await languageProvider.loadSavedLanguage();
 
-  // ============================================================================
-  // ✅ NEW: Initialize AuthProvider and load tokens
-  // ============================================================================
   final authProvider = AuthProvider();
-  await authProvider.initializeAuth(); // Load tokens from SecureStorage
+  await authProvider.initializeAuth(); 
   debugPrint('✅ [Main] AuthProvider initialized');
   debugPrint('🔍 [Main] isAuthenticated: ${authProvider.isAuthenticated}');
   debugPrint('🔍 [Main] currentUser: ${authProvider.currentUser?.email ?? "null"}');
-  // ============================================================================
 
   runApp(
     MultiProvider(
       providers: [
-        // ============================================================================
-        // ✅ CHANGED: Use .value instead of create (pass initialized instance)
-        // ============================================================================
-        ChangeNotifierProvider.value(value: authProvider),
-        // ============================================================================
-        
+
+        ChangeNotifierProvider.value(value: authProvider),  
         ChangeNotifierProvider(create: (_) => PatientProvider()),
         ChangeNotifierProvider(create: (_) => DetectionProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
@@ -68,11 +60,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
-    final authProvider = Provider.of<AuthProvider>(context); // ✅ NEW: Get authProvider
-
-    // ============================================================================
-    // ✅ NEW: Show splash screen while auth is initializing
-    // ============================================================================
+    final authProvider = Provider.of<AuthProvider>(context); 
     if (!authProvider.isInitialized) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -97,7 +85,6 @@ class MyApp extends StatelessWidget {
         ),
       );
     }
-    // ============================================================================
 
     return MaterialApp.router(
       title: 'DR Detection',
@@ -118,10 +105,6 @@ class MyApp extends StatelessWidget {
       supportedLocales: AppLocalizations.supportedLocales,
 
       locale: languageProvider.currentLocale,
-
-      // ============================================================================
-      // ROUTER
-      // ============================================================================
 
       routerConfig: AppRouter.router,
     );

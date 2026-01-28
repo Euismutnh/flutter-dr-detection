@@ -32,6 +32,7 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
   final _scrollController = ScrollController();
 
   bool _isInitialized = false;
+  bool _isDetecting = false;
 
   // Form data
   PatientModel? _selectedPatient;
@@ -170,9 +171,6 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     );
 
     detectionProvider.clearImage();
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   void _showAddPatientDialog() {
@@ -181,7 +179,21 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
   }
 
   Future<void> _startDetection() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_isDetecting) {
+      debugPrint('⚠️ [DetectionScreen] Already detecting, ignore tap');
+      return;
+    }
+
+    setState(() {
+      _isDetecting = true;
+    });
+
+    if (!_formKey.currentState!.validate()) {
+      setState(() {
+        _isDetecting = false;
+      });
+      return;
+    }
 
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
@@ -189,10 +201,16 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     // Validation
     if (_selectedPatient == null) {
       _showError(l10n.pleaseSelectPatient);
+      setState(() {
+        _isDetecting = false;
+      });
       return;
     }
     if (_eyeSide == null) {
       _showError(l10n.pleaseSelectEyeSide);
+      setState(() {
+        _isDetecting = false;
+      });
       return;
     }
 
@@ -203,15 +221,22 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
 
     if (!detectionProvider.hasImageReady) {
       _showError(l10n.pleaseUploadAndCropImage);
+      setState(() {
+        _isDetecting = false;
+      });
       return;
     }
 
     try {
+      debugPrint('🚀 [DetectionScreen] Starting detection (once)...');
+
       // Call detection API via provider
       await detectionProvider.startDetection(
         patientCode: _selectedPatient!.patientCode,
         sideEye: _eyeSide!,
       );
+
+      debugPrint('✅ [DetectionScreen] Detection completed successfully');
 
       if (mounted) {
         // Auto-scroll to result
@@ -244,6 +269,12 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDetecting = false;
+        });
       }
     }
   }
@@ -776,7 +807,7 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
       width: double.infinity,
       height: 50,
       child: ElevatedButton(
-        onPressed: isProcessing ? null : _startDetection,
+        onPressed: (isProcessing || _isDetecting) ? null : _startDetection,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,

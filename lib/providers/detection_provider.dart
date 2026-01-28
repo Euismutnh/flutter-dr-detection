@@ -210,135 +210,132 @@ class DetectionProvider extends ChangeNotifier {
   ///
   /// Throws: ApiException (caught by UI for localized message)
   Future<void> pickFile() async {
-  _isPicking = true;
-  _clearError();
-  notifyListeners();
-  
-  try {
-    // ======================================
-    // ✅ ADD THIS PERMISSION CHECK FIRST!
-    // ======================================
-    debugPrint('🔐 [DetectionProvider] Checking permission...');
-    
-    PermissionStatus status;
-    
-    if (Platform.isAndroid) {
-      // Check Android version
-      final androidInfo = await DeviceInfoPlugin().androidInfo;
-      final sdkInt = androidInfo.version.sdkInt;
-      
-      debugPrint('📱 [DetectionProvider] Android SDK: $sdkInt');
-      
-      if (sdkInt >= 33) {
-        // Android 13+ (API 33+) - Use photos permission
-        status = await Permission.photos.request();
+    _isPicking = true;
+    _clearError();
+    notifyListeners();
+
+    try {
+      // ======================================
+      // ✅ ADD THIS PERMISSION CHECK FIRST!
+      // ======================================
+      debugPrint('🔐 [DetectionProvider] Checking permission...');
+
+      PermissionStatus status;
+
+      if (Platform.isAndroid) {
+        // Check Android version
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        final sdkInt = androidInfo.version.sdkInt;
+
+        debugPrint('📱 [DetectionProvider] Android SDK: $sdkInt');
+
+        if (sdkInt >= 33) {
+          // Android 13+ (API 33+) - Use photos permission
+          status = await Permission.photos.request();
+        } else {
+          // Android 12 and below - Use storage permission
+          status = await Permission.storage.request();
+        }
       } else {
-        // Android 12 and below - Use storage permission
-        status = await Permission.storage.request();
+        // iOS - Use photos permission
+        status = await Permission.photos.request();
       }
-    } else {
-      // iOS - Use photos permission
-      status = await Permission.photos.request();
-    }
-    
-    // Check permission result
-    if (status.isDenied) {
-      debugPrint('⚠️ [DetectionProvider] Permission denied');
+
+      // Check permission result
+      if (status.isDenied) {
+        debugPrint('⚠️ [DetectionProvider] Permission denied');
+        _isPicking = false;
+        notifyListeners();
+        throw ApiException.clientError('error_permission_denied');
+      } else if (status.isPermanentlyDenied) {
+        debugPrint('⚠️ [DetectionProvider] Permission permanently denied');
+        _isPicking = false;
+        notifyListeners();
+        // Could open app settings here
+        // await openAppSettings();
+        throw ApiException.clientError('error_permission_denied');
+      }
+
+      debugPrint('✅ [DetectionProvider] Permission granted');
+      // ======================================
+      // END OF PERMISSION CHECK
+      // ======================================
+
+      // Original code continues here...
+      debugPrint('📁 [DetectionProvider] Opening file picker...');
+
+      // Pick file
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: AppConstants.supportedImageExtensions,
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        debugPrint('⚠️ [DetectionProvider] No file selected');
+        _isPicking = false;
+        notifyListeners();
+        throw ApiException.clientError('error_file_picker_cancelled');
+      }
+
+      // Get file
+      final filePath = result.files.single.path;
+      if (filePath == null) {
+        throw ApiException.clientError('error_file_picker_failed');
+      }
+
+      _pickedFile = File(filePath);
+      debugPrint('✅ [DetectionProvider] File picked: ${_pickedFile!.path}');
+
+      // Read bytes
+      _originalImageBytes = await _pickedFile!.readAsBytes();
+      debugPrint(
+        '📊 [DetectionProvider] File size: ${(_originalImageBytes!.length / 1024 / 1024).toStringAsFixed(2)} MB',
+      );
+
+      // Check file size
+      if (_originalImageBytes!.length > AppConstants.maxImageSizeBytes) {
+        _isPicking = false;
+        notifyListeners();
+        throw ApiException.clientError('error_image_too_large');
+      }
+
+      // Get extension
+      final extension = filePath.split('.').last.toLowerCase();
+      debugPrint('📝 [DetectionProvider] File extension: $extension');
+
+      // Check if needs conversion (TIFF → JPG)
+      if (AppConstants.needsConversion(extension)) {
+        debugPrint('🔄 [DetectionProvider] Needs conversion: $extension → JPG');
+        _isPicking = false;
+        notifyListeners();
+        // Convert
+        await convertImage();
+      } else {
+        // No conversion needed
+        _convertedImageBytes = _originalImageBytes;
+        debugPrint('✅ [DetectionProvider] No conversion needed');
+      }
+
+      _isPicking = false;
+
+      // Auto-open cropper
+      debugPrint('✂️ [DetectionProvider] Auto-opening cropper...');
+      await cropImage();
+    } catch (e) {
       _isPicking = false;
       notifyListeners();
-      throw ApiException.clientError('error_permission_denied');
-    } else if (status.isPermanentlyDenied) {
-      debugPrint('⚠️ [DetectionProvider] Permission permanently denied');
-      _isPicking = false;
-      notifyListeners();
-      // Could open app settings here
-      // await openAppSettings();
-      throw ApiException.clientError('error_permission_denied');
-    }
-    
-    debugPrint('✅ [DetectionProvider] Permission granted');
-    // ======================================
-    // END OF PERMISSION CHECK
-    // ======================================
-    
-    
-    // Original code continues here...
-    debugPrint('📁 [DetectionProvider] Opening file picker...');
-    
-    // Pick file
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: AppConstants.supportedImageExtensions,
-      allowMultiple: false,
-    );
-    
-    if (result == null || result.files.isEmpty) {
-      debugPrint('⚠️ [DetectionProvider] No file selected');
-      _isPicking = false;
-      notifyListeners();
-      throw ApiException.clientError('error_file_picker_cancelled');
-    }
-    
-    // Get file
-    final filePath = result.files.single.path;
-    if (filePath == null) {
+      debugPrint('❌ [DetectionProvider] Pick file failed: $e');
+
+      // Rethrow ApiException as-is
+      if (e is ApiException) {
+        rethrow;
+      }
+
+      // Wrap other errors as client error
       throw ApiException.clientError('error_file_picker_failed');
     }
-    
-    _pickedFile = File(filePath);
-    debugPrint('✅ [DetectionProvider] File picked: ${_pickedFile!.path}');
-    
-    // Read bytes
-    _originalImageBytes = await _pickedFile!.readAsBytes();
-    debugPrint(
-      '📊 [DetectionProvider] File size: ${(_originalImageBytes!.length / 1024 / 1024).toStringAsFixed(2)} MB',
-    );
-    
-    // Check file size
-    if (_originalImageBytes!.length > AppConstants.maxImageSizeBytes) {
-      _isPicking = false;
-      notifyListeners();
-      throw ApiException.clientError('error_image_too_large');
-    }
-    
-    // Get extension
-    final extension = filePath.split('.').last.toLowerCase();
-    debugPrint('📝 [DetectionProvider] File extension: $extension');
-    
-    // Check if needs conversion (TIFF → JPG)
-    if (AppConstants.needsConversion(extension)) {
-      debugPrint('🔄 [DetectionProvider] Needs conversion: $extension → JPG');
-      _isPicking = false;
-      notifyListeners();
-      // Convert
-      await convertImage();
-    } else {
-      // No conversion needed
-      _convertedImageBytes = _originalImageBytes;
-      debugPrint('✅ [DetectionProvider] No conversion needed');
-    }
-    
-    _isPicking = false;
-    notifyListeners();
-    
-    // Auto-open cropper
-    debugPrint('✂️ [DetectionProvider] Auto-opening cropper...');
-    await cropImage();
-    
-  } catch (e) {
-    _isPicking = false;
-    notifyListeners();
-    debugPrint('❌ [DetectionProvider] Pick file failed: $e');
-    
-    // Rethrow ApiException as-is
-    if (e is ApiException) {
-      rethrow;
-    }
-    
-    // Wrap other errors as client error
-    throw ApiException.clientError('error_file_picker_failed');
   }
-}
 
   // ============================================================================
   // IMAGE HANDLING - STEP 2: CONVERT IMAGE (TIFF → JPG)
@@ -420,16 +417,21 @@ class DetectionProvider extends ChangeNotifier {
       // Crop image with fixed 1:1 aspect ratio
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: _pickedFile!.path,
-        compressQuality: 90,
+        compressQuality: 100,
         maxWidth: 299,
         maxHeight: 299,
+        aspectRatio: const CropAspectRatio(ratioX: 1.0, ratioY: 1.0),
         uiSettings: [
           AndroidUiSettings(
-            toolbarTitle: 'Crop Fundus Image',
+            toolbarTitle: 'Crop Fundus Image (299x299)',
             toolbarColor: AppColors.primary,
             toolbarWidgetColor: AppColors.surface,
+            initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
-            aspectRatioPresets: [CropAspectRatioPreset.square],
+            hideBottomControls: false,
+            aspectRatioPresets: [
+              CropAspectRatioPreset.square, 
+            ],
           ),
           IOSUiSettings(
             title: 'Crop Fundus Image',
@@ -473,6 +475,7 @@ class DetectionProvider extends ChangeNotifier {
         '✅ [DetectionProvider] Image cropped successfully (${(_croppedImageBytes!.length / 1024).toStringAsFixed(2)} KB)',
       );
       _isCropping = false;
+      await Future.delayed(const Duration(milliseconds: 100));
       notifyListeners();
     } catch (e) {
       _isCropping = false;
