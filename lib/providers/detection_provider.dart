@@ -78,6 +78,7 @@ class DetectionProvider extends ChangeNotifier {
   /// Image cropping state
   bool _isCropping = false;
   bool get isCropping => _isCropping;
+  bool _cropCompleted = false;
 
   /// Check if image is ready to upload
   bool get hasImageReady => _croppedImageBytes != null;
@@ -403,6 +404,10 @@ class DetectionProvider extends ChangeNotifier {
   ///
   /// Throws: ApiException (caught by UI for localized message)
   Future<void> cropImage() async {
+    if (_cropCompleted) {
+      debugPrint('⚠️ [DetectionProvider] Crop already completed, skipping');
+      return;
+    }
     if (_pickedFile == null) {
       throw ApiException.clientError('error_no_image_selected');
     }
@@ -429,9 +434,7 @@ class DetectionProvider extends ChangeNotifier {
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
             hideBottomControls: false,
-            aspectRatioPresets: [
-              CropAspectRatioPreset.square, 
-            ],
+            aspectRatioPresets: [CropAspectRatioPreset.square],
           ),
           IOSUiSettings(
             title: 'Crop Fundus Image',
@@ -446,6 +449,7 @@ class DetectionProvider extends ChangeNotifier {
       if (croppedFile == null) {
         debugPrint('⚠️ [DetectionProvider] Cropping cancelled by user');
         _isCropping = false;
+        _cropCompleted = false;
         notifyListeners();
         throw ApiException.clientError('error_image_crop_cancelled');
       }
@@ -475,10 +479,12 @@ class DetectionProvider extends ChangeNotifier {
         '✅ [DetectionProvider] Image cropped successfully (${(_croppedImageBytes!.length / 1024).toStringAsFixed(2)} KB)',
       );
       _isCropping = false;
+      _cropCompleted = true;
       await Future.delayed(const Duration(milliseconds: 100));
       notifyListeners();
     } catch (e) {
       _isCropping = false;
+      _cropCompleted = false;
       notifyListeners();
       debugPrint('❌ [DetectionProvider] Cropping failed: $e');
 
@@ -502,6 +508,7 @@ class DetectionProvider extends ChangeNotifier {
     _originalImageBytes = null;
     _convertedImageBytes = null;
     _croppedImageBytes = null;
+    _cropCompleted = false; 
     debugPrint('🧹 [DetectionProvider] Image cleared');
     notifyListeners();
   }

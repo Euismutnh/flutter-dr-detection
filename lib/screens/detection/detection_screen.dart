@@ -616,18 +616,18 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
             Expanded(
               child: _buildEyeSideOption(
                 label: l10n.leftEye,
-                value: 'OS',
+                value: 'Left',
                 icon: Icons.visibility,
-                selected: _eyeSide == 'OS',
+                selected: _eyeSide == 'Left',
               ),
             ),
             Spacing.horizontalMD,
             Expanded(
               child: _buildEyeSideOption(
                 label: l10n.rightEye,
-                value: 'OD',
+                value: 'Right',
                 icon: Icons.visibility,
-                selected: _eyeSide == 'OD',
+                selected: _eyeSide == 'Right',
               ),
             ),
           ],
@@ -774,21 +774,27 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
           Spacing.verticalSM,
           Row(
             children: [
-              Icon(Icons.check_circle, color: AppColors.success, size: 20),
-              Spacing.horizontalXS,
-              Text(
-                l10n.imageCroppedReady,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.w600,
+              Icon(Icons.check_circle, color: AppColors.success, size: 16),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  l10n.imageCroppedReady,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.success,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const Spacer(),
-              TextButton.icon(
+              IconButton(
                 onPressed: _removeImage,
                 icon: const Icon(Icons.delete_outline, size: 18),
-                label: Text(l10n.removeImage),
+                color: AppColors.danger,
+                padding: EdgeInsets.all(Spacing.xs),
                 style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+                tooltip: l10n.removeImage,
               ),
             ],
           ),
@@ -946,7 +952,7 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
         ),
         _buildInfoRow(
           l10n.sideEye,
-          result.sideEye == 'OD' ? l10n.rightEye : l10n.leftEye,
+          result.sideEye == 'Right' ? l10n.rightEye : l10n.leftEye,
           Icons.visibility,
         ),
         _buildInfoRow(

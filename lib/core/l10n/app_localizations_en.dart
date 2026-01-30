@@ -568,7 +568,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadFundusImage => 'Upload Fundus Image';
 
   @override
-  String get imageCroppedReady => 'Image cropped and ready';
+  String get imageCroppedReady => 'Image ready';
 
   @override
   String get removeImage => 'Remove Image';
