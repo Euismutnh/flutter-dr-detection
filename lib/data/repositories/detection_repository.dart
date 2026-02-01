@@ -114,15 +114,13 @@ class DetectionRepository {
         image: image,
       );
 
-      // Store session data in memory (NOT in Hive)
-      _currentSessionId = response.sessionId;
-      _currentPreviewData = response.data;
+      _currentSessionId = response.sessionId; 
+      _currentPreviewData = response;
 
       debugPrint('✅ [DetectionRepo] Detection started, session: ${response.sessionId}');
-      debugPrint('   Classification: ${response.data.classification} - ${response.data.predictedLabel}');
-      debugPrint('   Confidence: ${(response.data.confidence * 100).toStringAsFixed(1)}%');
-
-      return response.data;
+      debugPrint('   Classification: ${response.classification} - ${response.predictedLabel}');
+      debugPrint('   Confidence: ${(response.confidence * 100).toStringAsFixed(1)}%');
+      return response;
     } on ApiException catch (e) {
       debugPrint('❌ [DetectionRepo] Start detection failed: ${e.message}');
       rethrow;

@@ -569,18 +569,22 @@ class DetectionProvider extends ChangeNotifier {
         '   Confidence: ${(preview.confidence * 100).toStringAsFixed(1)}%',
       );
 
-      _isProcessing = false;
-      notifyListeners();
+      // _isProcessing = false;
+      // notifyListeners();
     } on ApiException catch (e) {
       _setError(e.errorKey);
-      _isProcessing = false;
-      notifyListeners();
+      // _isProcessing = false;
+      // notifyListeners();
       rethrow;
     } catch (e) {
       _setError('error_unknown');
+      // _isProcessing = false;
+      // notifyListeners();
+      throw ApiException(errorKey: 'error_unknown', error: null);
+    }
+    finally {
       _isProcessing = false;
       notifyListeners();
-      throw ApiException(errorKey: 'error_unknown', error: null);
     }
   }
 
