@@ -18,7 +18,6 @@ import '../../screens/patient/edit_patient_screen.dart';
 import '../../screens/detection/detection_screen.dart';
 import '../../screens/detection/detection_history_screen.dart';
 import '../../screens/detection/detection_detail_screen.dart';
-import '../../screens/detection/progress_chart_screen.dart';
 import '../../screens/profile/profile_screen.dart';
 import '../../screens/profile/edit_profile_screen.dart';
 import '../../widgets/scaffold_with_navbar.dart';
@@ -229,7 +228,7 @@ class AppRouter {
                 builder: (context, state) {
                   // Support pre-selection via query parameter
                   return const StartDetectionScreen(
-                    key: ValueKey('tab_detection'), 
+                    key: ValueKey('tab_detection'),
                   );
                 },
               ),
@@ -261,14 +260,14 @@ class AppRouter {
       ),
 
       GoRoute(
-        path: '/detection/start', 
+        path: '/detection/start',
         name: 'start-detection-direct',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
           final patientCode = state.uri.queryParameters['patientCode'];
 
           return StartDetectionScreen(
-            key: ValueKey('detection_$patientCode'), 
+            key: ValueKey('detection_$patientCode'),
             preSelectedPatientCode: patientCode,
           );
         },
@@ -303,29 +302,14 @@ class AppRouter {
         },
       ),
 
-      
-
       /// Detection Detail Screen
       GoRoute(
         path: RouteNames.detectionDetail,
         name: 'detection-detail',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-          final detectionId =
-              int.tryParse(state.pathParameters['id'] ?? '0') ?? 0;
+          final detectionId = state.pathParameters['id'] ?? ''; 
           return DetectionDetailScreen(detectionId: detectionId);
-        },
-      ),
-
-      /// Progress Chart Screen
-      GoRoute(
-        path: RouteNames.progressChart,
-        name: 'progress-chart',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) {
-          final patientId =
-              int.tryParse(state.pathParameters['patientId'] ?? '0') ?? 0;
-          return ProgressChartScreen(patientId: patientId);
         },
       ),
 

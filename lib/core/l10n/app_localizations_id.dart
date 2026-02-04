@@ -84,6 +84,14 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get ageRangeError => 'Usia min tidak boleh lebih dari usia maks';
+  @override
+  String get reset => 'Atur Ulang';
+  @override
+  String get apply => 'Terapkan';
+  @override
+  String get period => 'Periode';
+  @override
+  String get noResultsFound => 'Tidak ada hasil ditemukan';
 
   // ============================================================================
   // AUTH
@@ -436,7 +444,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get worsening => 'Memburuk';
 
-  // ⭐ BARU - Filter & Tampilan Chart
   @override
   String get filterBy => 'Filter berdasarkan';
 
@@ -611,6 +618,23 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get detectedAt => 'Terdeteksi Pada';
+  @override
+  String get detectionDetails => 'Detail Deteksi';
+  @override
+  String get deleteDetection => 'Hapus Deteksi';
+  @override
+  String get deleteDetectionConfirmation =>
+      'Apakah Anda yakin ingin menghapus deteksi ini? Tindakan ini tidak dapat dibatalkan.';
+      @override
+  String get yesDelete => 'Ya, Hapus';
+  @override
+  String get deletingDetection => 'Menghapus deteksi...';
+  @override
+  String get successDetectionDeleted => 'Deteksi berhasil dihapus';
+  @override
+  String get time => 'Waktu';
+  @override
+  String get description => 'Deskripsi';
 
   // ============================================================================
   // PROFESSIONS

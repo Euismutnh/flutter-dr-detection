@@ -10,6 +10,7 @@ import '../../providers/detection_provider.dart';
 import '../../data/models/patient/patient_model.dart';
 import '../../widgets/patient_avatar.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_gradients.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/constants/spacing.dart';
 import '../../core/utils/helpers.dart';
@@ -33,6 +34,7 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
 
   bool _isInitialized = false;
   bool _isDetecting = false;
+  bool _isRetrying = false;
 
   // Form data
   PatientModel? _selectedPatient;
@@ -64,18 +66,13 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
   void didUpdateWidget(StartDetectionScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Reload when preSelectedPatientCode changes
     if (widget.preSelectedPatientCode != oldWidget.preSelectedPatientCode &&
         widget.preSelectedPatientCode != null) {
       debugPrint(
         '🔄 [DetectionScreen] preSelectedPatientCode changed: '
         '${oldWidget.preSelectedPatientCode} → ${widget.preSelectedPatientCode}',
       );
-
-      // Reset initialization flag to allow reload
       _isInitialized = false;
-
-      // Reload with new patient
       _loadInitialData();
     }
   }
@@ -91,7 +88,6 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     try {
       await patientProvider.loadPatients();
 
-      // Pre-select patient if provided
       if (widget.preSelectedPatientCode != null && mounted) {
         final patients = patientProvider.patients ?? [];
         final patient = patients
@@ -117,22 +113,18 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     );
     final patients = patientProvider.patients ?? [];
 
-    if (query.isEmpty) {
-      setState(() {
-        _filteredPatients = patients.take(5).toList();
-      });
-    } else {
-      setState(() {
-        _filteredPatients = patients
-            .where(
-              (p) =>
-                  p.name.toLowerCase().contains(query.toLowerCase()) ||
-                  p.patientCode.toLowerCase().contains(query.toLowerCase()),
-            )
-            .take(5)
-            .toList();
-      });
-    }
+    setState(() {
+      _filteredPatients = query.isEmpty
+          ? patients.take(5).toList()
+          : patients
+                .where(
+                  (p) =>
+                      p.name.toLowerCase().contains(query.toLowerCase()) ||
+                      p.patientCode.toLowerCase().contains(query.toLowerCase()),
+                )
+                .take(5)
+                .toList();
+    });
   }
 
   Future<void> _uploadImage() async {
@@ -143,40 +135,27 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     );
 
     try {
-      // Step 1: Pick file
       await detectionProvider.pickFile();
-
-      // Step 2: Crop image (user can position!)
       await detectionProvider.cropImage();
-
-      // Success - image ready
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     } on ApiException catch (e) {
-      if (mounted) {
-        _showError(e.getTranslatedMessageFromL10n(l10n));
-      }
+      if (mounted) _showError(e.getTranslatedMessageFromL10n(l10n));
     } catch (e) {
-      if (mounted) {
-        _showError(l10n.errorUnknown);
-      }
+      if (mounted) _showError(l10n.errorUnknown);
     }
   }
 
   void _removeImage() {
-    final detectionProvider = Provider.of<DetectionProvider>(
-      context,
-      listen: false,
-    );
-
-    detectionProvider.clearImage();
+    Provider.of<DetectionProvider>(context, listen: false).clearImage();
   }
 
   void _showAddPatientDialog() {
-    final router = GoRouter.of(context);
-    router.push('/patients/add');
+    GoRouter.of(context).push('/patients/add');
   }
+
+  // ============================================================================
+  // START DETECTION
+  // ============================================================================
 
   Future<void> _startDetection() async {
     if (_isDetecting) {
@@ -198,7 +177,6 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
-    // Validation
     if (_selectedPatient == null) {
       _showError(l10n.pleaseSelectPatient);
       setState(() {
@@ -228,9 +206,8 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     }
 
     try {
-      debugPrint('🚀 [DetectionScreen] Starting detection (once)...');
+      debugPrint('🚀 [DetectionScreen] Starting detection...');
 
-      // Call detection API via provider
       await detectionProvider.startDetection(
         patientCode: _selectedPatient!.patientCode,
         sideEye: _eyeSide!,
@@ -239,7 +216,6 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
       debugPrint('✅ [DetectionScreen] Detection completed successfully');
 
       if (mounted) {
-        // Auto-scroll to result
         await Future.delayed(const Duration(milliseconds: 300));
         if (_scrollController.hasClients) {
           _scrollController.animateTo(
@@ -251,10 +227,9 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
       }
     } on ApiException catch (e) {
       if (mounted) {
-        final message = e.getTranslatedMessageFromL10n(l10n);
         messenger.showSnackBar(
           SnackBar(
-            content: Text(message),
+            content: Text(e.getTranslatedMessageFromL10n(l10n)),
             backgroundColor: AppColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -279,10 +254,83 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     }
   }
 
+  // ============================================================================
+  // RETRY — shows loading dialog while API call runs
+  // ============================================================================
+
+  Future<void> _retryDetection() async {
+    if (_isRetrying) return;
+
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final detectionProvider = Provider.of<DetectionProvider>(
+      context,
+      listen: false,
+    );
+
+    setState(() {
+      _isRetrying = true;
+    });
+
+    // Show overlay so user knows retry is happening
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (_) => const _RetryLoadingDialog(),
+    );
+
+    // Let dialog render before starting work
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    try {
+      // startDetection() overwrites _sessionId & _previewData internally,
+      // and _croppedImageBytes is still valid — so just call it directly.
+      debugPrint('🔄 [DetectionScreen] Retrying detection...');
+
+      await detectionProvider.startDetection(
+        patientCode: _selectedPatient!.patientCode,
+        sideEye: _eyeSide!,
+      );
+
+      debugPrint('✅ [DetectionScreen] Retry completed successfully');
+    } on ApiException catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(e.getTranslatedMessageFromL10n(l10n)),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(l10n.errorUnknown),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() {
+          _isRetrying = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================================
+  // SAVE
+  // ============================================================================
+
   Future<void> _saveDetection() async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
-
     final detectionProvider = Provider.of<DetectionProvider>(
       context,
       listen: false,
@@ -302,7 +350,6 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
           ),
         );
 
-        // Scroll to top
         if (_scrollController.hasClients) {
           _scrollController.animateTo(
             0,
@@ -313,10 +360,9 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
       }
     } on ApiException catch (e) {
       if (mounted) {
-        final message = e.getTranslatedMessageFromL10n(l10n);
         messenger.showSnackBar(
           SnackBar(
-            content: Text(message),
+            content: Text(e.getTranslatedMessageFromL10n(l10n)),
             backgroundColor: AppColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -335,10 +381,6 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     }
   }
 
-  void _retryDetection() {
-    _startDetection();
-  }
-
   Future<void> _cancelDetection() async {
     final l10n = AppLocalizations.of(context);
 
@@ -349,18 +391,25 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.all(Spacing.sm),
               decoration: BoxDecoration(
                 color: AppColors.danger.withValues(alpha: 0.1),
-                borderRadius: Spacing.radiusMD,
+                borderRadius: Spacing.radiusSM,
               ),
-              child: const Icon(Icons.warning, color: AppColors.danger),
+              child: const Icon(
+                Icons.warning_rounded,
+                color: AppColors.danger,
+                size: 22,
+              ),
             ),
             Spacing.horizontalMD,
             Expanded(child: Text(l10n.confirm, style: AppTextStyles.h4)),
           ],
         ),
-        content: Text(l10n.allUnsavedDataWillBeLost),
+        content: Text(
+          l10n.allUnsavedDataWillBeLost,
+          style: AppTextStyles.bodyMedium,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -371,6 +420,7 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.danger,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: Spacing.radiusMD),
             ),
             child: Text(l10n.yes),
           ),
@@ -384,7 +434,6 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
         context,
         listen: false,
       );
-
       detectionProvider.cancelDetection();
 
       if (mounted) {
@@ -413,43 +462,65 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
-      appBar: AppBar(
-        title: Text(
-          l10n.detection,
-          style: AppTextStyles.h4.copyWith(fontWeight: FontWeight.bold),
-        ),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: AppColors.textPrimary,
-      ),
       body: Consumer<DetectionProvider>(
         builder: (context, detectionProvider, child) {
           final hasResult = detectionProvider.previewData != null;
 
           return SingleChildScrollView(
             controller: _scrollController,
-            padding: Spacing.paddingLG,
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // SECTION 1: INPUT FORM
-                  _buildInputSection(l10n, detectionProvider),
+            child: Column(
+              children: [
+                Spacing.verticalXXL,
+                _buildHeader(l10n),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: Spacing.lg),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Spacing.verticalLG,
+                        _buildInputSection(l10n, detectionProvider),
 
-                  // Show result if available
-                  if (hasResult) ...[
-                    Spacing.verticalXXL,
-                    _buildResultSection(l10n, detectionProvider),
-                  ],
-                ],
-              ),
+                        if (hasResult) ...[
+                          Spacing.verticalLG,
+                          _buildResultSection(l10n, detectionProvider),
+                        ],
+
+                        Spacing.verticalXXXL,
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           );
         },
       ),
     );
   }
+
+  Widget _buildHeader(AppLocalizations l10n) {
+    return Padding(
+      padding: Spacing.paddingLG,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            l10n.detection,
+            style: AppTextStyles.h1.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.2, end: 0);
+  }
+
+  // ============================================================================
+  // INPUT SECTION
+  // ============================================================================
 
   Widget _buildInputSection(
     AppLocalizations l10n,
@@ -471,30 +542,21 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.detectionInformation,
-            style: AppTextStyles.h4.copyWith(fontWeight: FontWeight.bold),
-          ),
-          Spacing.verticalLG,
-
-          // Patient Selection
           _buildPatientSelection(l10n),
           Spacing.verticalLG,
-
-          // Eye Side Selection
           _buildEyeSideSelection(l10n),
           Spacing.verticalLG,
-
-          // Image Upload
           _buildImageUpload(l10n, detectionProvider),
-          Spacing.verticalXL,
-
-          // Start Detection Button
+          Spacing.verticalLG,
           _buildStartButton(l10n, detectionProvider),
         ],
       ),
-    ).animate().fadeIn().slideY(begin: -0.1, end: 0);
+    ).animate().fadeIn().slideY(begin: 0.05, end: 0);
   }
+
+  // ============================================================================
+  // PATIENT SELECTION
+  // ============================================================================
 
   Widget _buildPatientSelection(AppLocalizations l10n) {
     return Column(
@@ -503,6 +565,7 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
         Text(
           '${l10n.selectPatient} *',
           style: AppTextStyles.labelMedium.copyWith(
+            color: AppColors.textPrimary,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -511,19 +574,16 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
           controller: _searchController,
           decoration: InputDecoration(
             hintText: l10n.searchPatients,
-            prefixIcon: const Icon(Icons.search),
+            prefixIcon: const Icon(Icons.search_rounded, size: 20),
             suffixIcon: _selectedPatient != null
                 ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      setState(() {
-                        _selectedPatient = null;
-                        _searchController.clear();
-                      });
-                    },
+                    icon: const Icon(Icons.clear_rounded, size: 18),
+                    onPressed: () => setState(() {
+                      _selectedPatient = null;
+                      _searchController.clear();
+                    }),
                   )
                 : null,
-            border: OutlineInputBorder(borderRadius: Spacing.radiusMD),
           ),
           onTap: () {
             setState(() => _showPatientDropdown = true);
@@ -535,11 +595,10 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
           },
         ),
 
-        // Dropdown results
         if (_showPatientDropdown) ...[
-          Spacing.verticalSM,
+          Spacing.verticalXS,
           Container(
-            constraints: const BoxConstraints(maxHeight: 300),
+            constraints: const BoxConstraints(maxHeight: 240),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: Spacing.radiusMD,
@@ -555,37 +614,61 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
             child: ListView(
               shrinkWrap: true,
               children: [
-                // Patient options
                 ..._filteredPatients.map(
                   (patient) => ListTile(
                     leading: PatientAvatar(
                       name: patient.name,
                       gender: patient.gender,
-                      size: 40,
+                      size: 36,
                     ),
-                    title: Text(patient.name),
-                    subtitle: Text(patient.patientCode),
-                    onTap: () {
-                      setState(() {
-                        _selectedPatient = patient;
-                        _searchController.text =
-                            '${patient.name} - ${patient.patientCode}';
-                        _showPatientDropdown = false;
-                      });
-                    },
+                    title: Text(
+                      patient.name,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      patient.patientCode,
+                      style: AppTextStyles.bodySmall,
+                    ),
+                    onTap: () => setState(() {
+                      _selectedPatient = patient;
+                      _searchController.text =
+                          '${patient.name} - ${patient.patientCode}';
+                      _showPatientDropdown = false;
+                    }),
                   ),
                 ),
 
-                // Add new patient option
                 if (_filteredPatients.isEmpty ||
                     _searchController.text.isNotEmpty) ...[
-                  const Divider(),
+                  const Divider(height: 1),
                   ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: AppColors.primary,
-                      child: Icon(Icons.add, color: Colors.white),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: Spacing.md,
+                      vertical: Spacing.xs,
                     ),
-                    title: Text(l10n.addNewPatient),
+                    leading: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: Spacing.radiusSM,
+                      ),
+                      child: const Icon(
+                        Icons.add_rounded,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      l10n.addNewPatient,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     onTap: () {
                       setState(() => _showPatientDropdown = false);
                       _showAddPatientDialog();
@@ -607,77 +690,66 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
         Text(
           '${l10n.sideEye} *',
           style: AppTextStyles.labelMedium.copyWith(
+            color: AppColors.textPrimary,
             fontWeight: FontWeight.w600,
           ),
         ),
         Spacing.verticalSM,
         Row(
           children: [
-            Expanded(
-              child: _buildEyeSideOption(
-                label: l10n.leftEye,
-                value: 'Left',
-                icon: Icons.visibility,
-                selected: _eyeSide == 'Left',
-              ),
-            ),
-            Spacing.horizontalMD,
-            Expanded(
-              child: _buildEyeSideOption(
-                label: l10n.rightEye,
-                value: 'Right',
-                icon: Icons.visibility,
-                selected: _eyeSide == 'Right',
-              ),
-            ),
+            Expanded(child: _buildEyeChip(l10n.leftEye, 'Left')),
+            Spacing.horizontalSM,
+            Expanded(child: _buildEyeChip(l10n.rightEye, 'Right')),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildEyeSideOption({
-    required String label,
-    required String value,
-    required IconData icon,
-    required bool selected,
-  }) {
+  Widget _buildEyeChip(String label, String value) {
+    final selected = _eyeSide == value;
+
     return InkWell(
       onTap: () => setState(() => _eyeSide = value),
       borderRadius: Spacing.radiusMD,
-      child: Container(
-        padding: Spacing.paddingMD,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        height: 44,
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.primary.withValues(alpha: 0.1)
+              ? AppColors.primary.withValues(alpha: 0.08)
               : Colors.transparent,
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.borderLight,
-            width: selected ? 2 : 1,
+            color: selected ? AppColors.primary : AppColors.border,
+            width: selected ? 2 : 1.5,
           ),
           borderRadius: Spacing.radiusMD,
         ),
-        child: Column(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              icon,
-              size: 32,
+              Icons.visibility_rounded,
+              size: 18,
               color: selected ? AppColors.primary : AppColors.textSecondary,
             ),
-            Spacing.verticalSM,
+            Spacing.horizontalSM,
             Text(
               label,
               style: AppTextStyles.labelMedium.copyWith(
                 color: selected ? AppColors.primary : AppColors.textSecondary,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
       ),
     );
   }
+
+  // ============================================================================
+  // IMAGE UPLOAD
+  // ============================================================================
 
   Widget _buildImageUpload(
     AppLocalizations l10n,
@@ -693,35 +765,39 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
         Text(
           '${l10n.fundusImage} *',
           style: AppTextStyles.labelMedium.copyWith(
+            color: AppColors.textPrimary,
             fontWeight: FontWeight.w600,
           ),
         ),
         Spacing.verticalSM,
 
         if (!hasImage) ...[
-          // Upload button
           InkWell(
             onTap: isLoading ? null : _uploadImage,
             borderRadius: Spacing.radiusMD,
             child: Container(
-              height: 300,
+              height: 180,
+              width: double.maxFinite,
               decoration: BoxDecoration(
                 color: AppColors.background,
                 borderRadius: Spacing.radiusMD,
-                border: Border.all(color: AppColors.borderLight, width: 2),
+                border: Border.all(color: AppColors.borderLight, width: 1.5),
               ),
               child: isLoading
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const CircularProgressIndicator(),
+                          CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: AppColors.primary,
+                          ),
                           Spacing.verticalMD,
                           Text(
                             detectionProvider.isPicking
                                 ? 'Picking image...'
                                 : 'Cropping image...',
-                            style: AppTextStyles.bodyMedium.copyWith(
+                            style: AppTextStyles.bodySmall.copyWith(
                               color: AppColors.textSecondary,
                             ),
                           ),
@@ -731,19 +807,27 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.cloud_upload_outlined,
-                          size: 64,
-                          color: AppColors.textSecondary,
+                        Container(
+                          padding: EdgeInsets.all(Spacing.sm + 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.08),
+                            borderRadius: Spacing.radiusMD,
+                          ),
+                          child: const Icon(
+                            Icons.cloud_upload_rounded,
+                            size: 28,
+                            color: AppColors.primary,
+                          ),
                         ),
                         Spacing.verticalMD,
                         Text(
                           l10n.uploadFundusImage,
-                          style: AppTextStyles.bodyLarge.copyWith(
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.textPrimary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        Spacing.verticalSM,
+                        Spacing.verticalXS,
                         Text(
                           l10n.imageCropTo299,
                           style: AppTextStyles.bodySmall.copyWith(
@@ -755,9 +839,8 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
             ),
           ),
         ] else ...[
-          // Show cropped image
           Container(
-            height: 300,
+            height: 180,
             decoration: BoxDecoration(
               borderRadius: Spacing.radiusMD,
               border: Border.all(color: AppColors.borderLight),
@@ -774,8 +857,12 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
           Spacing.verticalSM,
           Row(
             children: [
-              Icon(Icons.check_circle, color: AppColors.success, size: 16),
-              SizedBox(width: 6),
+              Icon(
+                Icons.check_circle_rounded,
+                color: AppColors.success,
+                size: 16,
+              ),
+              Spacing.horizontalSM,
               Expanded(
                 child: Text(
                   l10n.imageCroppedReady,
@@ -786,14 +873,12 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
               IconButton(
                 onPressed: _removeImage,
-                icon: const Icon(Icons.delete_outline, size: 18),
+                icon: const Icon(Icons.delete_outline_rounded, size: 18),
                 color: AppColors.danger,
-                padding: EdgeInsets.all(Spacing.xs),
-                style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-                constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 tooltip: l10n.removeImage,
               ),
             ],
@@ -803,58 +888,78 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     );
   }
 
+  // ============================================================================
+  // START BUTTON — gradient pill with shadow (same as DetectionsTodayCard)
+  // ============================================================================
+
   Widget _buildStartButton(
     AppLocalizations l10n,
     DetectionProvider detectionProvider,
   ) {
     final isProcessing = detectionProvider.isProcessing;
+    final disabled = isProcessing || _isDetecting;
 
     return SizedBox(
       width: double.infinity,
-      height: 50,
-      child: ElevatedButton(
-        onPressed: (isProcessing || _isDetecting) ? null : _startDetection,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: Spacing.radiusMD),
-          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.6),
-        ),
-        child: isProcessing
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.play_arrow, size: 24),
-                  Spacing.horizontalSM,
-                  Text(
-                    l10n.startDetection,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+      height: Spacing.buttonHeightMD,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: disabled ? null : AppGradients.primary,
+          borderRadius: Spacing.radiusXXL,
+          boxShadow: disabled
+              ? []
+              : [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.35),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ],
-              ),
+        ),
+        child: ElevatedButton(
+          onPressed: disabled ? null : _startDetection,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: disabled
+                ? AppColors.primary.withValues(alpha: 0.4)
+                : Colors.transparent,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: Spacing.radiusXXL),
+          ),
+          child: (isProcessing || _isDetecting)
+              ? const SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.play_circle_filled_rounded, size: 22),
+                    Spacing.horizontalSM,
+                    Text(l10n.startDetection, style: AppTextStyles.buttonLarge),
+                  ],
+                ),
+        ),
       ),
     );
   }
+
+  // ============================================================================
+  // RESULT SECTION
+  // ============================================================================
 
   Widget _buildResultSection(
     AppLocalizations l10n,
     DetectionProvider detectionProvider,
   ) {
     final result = detectionProvider.previewData!;
+    final classColor = AppColors.getClassificationColor(result.classification);
 
     return Container(
-      padding: Spacing.paddingLG,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: Spacing.radiusXL,
@@ -867,112 +972,192 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.detectionResult,
-            style: AppTextStyles.h4.copyWith(fontWeight: FontWeight.bold),
+          // ── Result header — gradient banner, same inline card pattern
+          //     as home_screen DetectionsTodayCard
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(
+              horizontal: Spacing.md + 2,
+              vertical: Spacing.md,
+            ),
+            decoration: BoxDecoration(
+              gradient: AppGradients.getClassificationGradient(
+                result.classification,
+              ),
+              borderRadius: Spacing.customRadius(topLeft: 20, topRight: 20),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(Spacing.sm + 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: Spacing.radiusMD,
+                  ),
+                  child: Icon(
+                    Icons.medical_services_rounded,
+                    color: Colors.white,
+                    size: Spacing.iconMD - 2,
+                  ),
+                ),
+                Spacing.horizontalMD,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.detectionResult,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Spacing.verticalXXS,
+                      Text(
+                        result.predictedLabel,
+                        style: AppTextStyles.h3.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          height: 1.1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          Spacing.verticalLG,
 
-          // Result details
-          _buildResultDetails(result, l10n, detectionProvider),
+          // ── Body
+          Padding(
+            padding: Spacing.paddingLG,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Fundus image
+                if (detectionProvider.croppedImageBytes != null) ...[
+                  Container(
+                    height: 180,
+                    decoration: BoxDecoration(
+                      borderRadius: Spacing.radiusMD,
+                      border: Border.all(color: AppColors.borderLight),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: Spacing.radiusMD,
+                      child: Image.memory(
+                        detectionProvider.croppedImageBytes!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                      ),
+                    ),
+                  ),
+                  Spacing.verticalLG,
+                ],
 
-          Spacing.verticalXL,
+                // Classification badge — left-border card
+                // (exact same pattern as home_screen _buildClassificationCard)
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Spacing.sm + 4,
+                    vertical: Spacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: Spacing.radiusMD,
+                    border: Border(
+                      left: BorderSide(color: classColor, width: 4),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.shadowLight,
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.local_hospital_rounded,
+                        color: classColor,
+                        size: 20,
+                      ),
+                      Spacing.horizontalSM,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            result.predictedLabel,
+                            style: AppTextStyles.h3.copyWith(
+                              color: classColor,
+                              fontWeight: FontWeight.w700,
+                              height: 1.0,
+                            ),
+                          ),
+                          Spacing.verticalXXS,
+                          Text(
+                            '${(result.confidence * 100).toStringAsFixed(1)}% confidence',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
 
-          // Action buttons (Save, Retry, Cancel)
-          _buildActionButtons(l10n, detectionProvider),
+                Spacing.verticalLG,
+
+                // Info rows
+                _buildInfoRow(
+                  l10n.confidence,
+                  '${(result.confidence * 100).toStringAsFixed(1)}%',
+                  Icons.verified_rounded,
+                ),
+                _buildInfoRow(
+                  l10n.sideEye,
+                  result.sideEye == 'Right' ? l10n.rightEye : l10n.leftEye,
+                  Icons.visibility_rounded,
+                ),
+                _buildInfoRow(
+                  'Detected At',
+                  Helpers.formatDateTime(DateTime.now()),
+                  Icons.access_time_rounded,
+                ),
+
+                Spacing.verticalLG,
+
+                // Action buttons
+                _buildActionButtons(l10n, detectionProvider),
+              ],
+            ),
+          ),
         ],
       ),
-    ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1, end: 0);
-  }
-
-  Widget _buildResultDetails(
-    dynamic result,
-    AppLocalizations l10n,
-    DetectionProvider detectionProvider,
-  ) {
-    return Column(
-      children: [
-        // Image
-        if (detectionProvider.croppedImageBytes != null)
-          Container(
-            height: 280,
-            decoration: BoxDecoration(
-              borderRadius: Spacing.radiusMD,
-              border: Border.all(color: AppColors.borderLight),
-            ),
-            child: ClipRRect(
-              borderRadius: Spacing.radiusMD,
-              child: Image.memory(
-                detectionProvider.croppedImageBytes!,
-                fit: BoxFit.cover,
-                width: double.infinity,
-              ),
-            ),
-          ),
-
-        Spacing.verticalLG,
-
-        // Classification Badge
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Helpers.getClassificationColor(
-              result.classification,
-            ).withValues(alpha: 0.1),
-            borderRadius: Spacing.radiusMD,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.local_hospital,
-                color: Helpers.getClassificationColor(result.classification),
-              ),
-              Spacing.horizontalSM,
-              Text(
-                result.predictedLabel,
-                style: AppTextStyles.h4.copyWith(
-                  color: Helpers.getClassificationColor(result.classification),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        Spacing.verticalLG,
-
-        // Details
-        _buildInfoRow(
-          l10n.confidence,
-          '${(result.confidence * 100).toStringAsFixed(1)}%',
-          Icons.verified,
-        ),
-        _buildInfoRow(
-          l10n.sideEye,
-          result.sideEye == 'Right' ? l10n.rightEye : l10n.leftEye,
-          Icons.visibility,
-        ),
-        _buildInfoRow(
-          'Detected At',
-          Helpers.formatDateTime(DateTime.now()),
-          Icons.access_time,
-        ),
-      ],
-    );
+    ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.08, end: 0);
   }
 
   Widget _buildInfoRow(String label, String value, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: Spacing.sm - 2),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: AppColors.textSecondary),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: Spacing.radiusSM,
+            ),
+            child: Icon(icon, size: 17, color: AppColors.textSecondary),
+          ),
           Spacing.horizontalSM,
           Text(
-            '$label:',
+            label,
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -981,6 +1166,7 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
           Text(
             value,
             style: AppTextStyles.bodyMedium.copyWith(
+              color: AppColors.textPrimary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -989,61 +1175,217 @@ class _StartDetectionScreenState extends State<StartDetectionScreen> {
     );
   }
 
+  // ============================================================================
+  // ACTION BUTTONS
+  // ============================================================================
+
   Widget _buildActionButtons(
     AppLocalizations l10n,
     DetectionProvider detectionProvider,
   ) {
     final isSaving = detectionProvider.isSaving;
 
-    return Row(
+    return Column(
       children: [
-        // Save
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: isSaving ? null : _saveDetection,
-            icon: const Icon(Icons.save, size: 18),
-            label: Text(l10n.save),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: Spacing.radiusMD),
+        // Row: Save (gradient pill) + Retry (outlined)
+        Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: SizedBox(
+                height: 46,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: isSaving ? null : AppGradients.success,
+                    borderRadius: Spacing.radiusXXL,
+                    boxShadow: isSaving
+                        ? []
+                        : [
+                            BoxShadow(
+                              color: AppColors.success.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: isSaving ? null : _saveDetection,
+                    icon: const Icon(Icons.save_rounded, size: 18),
+                    label: Text(l10n.save),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSaving
+                          ? AppColors.success.withValues(alpha: 0.4)
+                          : Colors.transparent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: Spacing.radiusXXL,
+                      ),
+                      textStyle: AppTextStyles.labelMedium.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-        Spacing.horizontalSM,
+            Spacing.horizontalSM,
 
-        // Retry
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: isSaving ? null : _retryDetection,
-            icon: const Icon(Icons.refresh, size: 18),
-            label: Text(l10n.retry),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.info,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: Spacing.radiusMD),
+            Expanded(
+              flex: 2,
+              child: SizedBox(
+                height: 46,
+                child: OutlinedButton.icon(
+                  onPressed: (isSaving || _isRetrying) ? null : _retryDetection,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: Text(l10n.retry),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: BorderSide(
+                      color: AppColors.primary.withValues(alpha: 0.4),
+                      width: 1.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: Spacing.radiusXXL,
+                    ),
+                    textStyle: AppTextStyles.labelMedium.copyWith(
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
-        Spacing.horizontalSM,
 
-        // Cancel
-        Expanded(
-          child: OutlinedButton.icon(
+        Spacing.verticalSM,
+
+        // Cancel — full width, subtle text button
+        SizedBox(
+          width: double.infinity,
+          height: 40,
+          child: TextButton.icon(
             onPressed: isSaving ? null : _cancelDetection,
-            icon: const Icon(Icons.close, size: 18),
+            icon: const Icon(Icons.close_rounded, size: 16),
             label: Text(l10n.cancel),
-            style: OutlinedButton.styleFrom(
+            style: TextButton.styleFrom(
               foregroundColor: AppColors.danger,
-              side: const BorderSide(color: AppColors.danger),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: Spacing.radiusMD),
+              shape: RoundedRectangleBorder(borderRadius: Spacing.radiusXXL),
+              textStyle: AppTextStyles.labelSmall.copyWith(
+                color: AppColors.danger,
+              ),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+// ============================================================================
+// RETRY LOADING DIALOG
+// ============================================================================
+
+class _RetryLoadingDialog extends StatefulWidget {
+  const _RetryLoadingDialog();
+
+  @override
+  State<_RetryLoadingDialog> createState() => _RetryLoadingDialogState();
+}
+
+class _RetryLoadingDialogState extends State<_RetryLoadingDialog>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
+    return Center(
+      child: Container(
+        padding: EdgeInsets.all(Spacing.xl),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: Spacing.radiusXL,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Pulsing gradient icon
+            AnimatedBuilder(
+              animation: _pulseController,
+              builder: (context, child) {
+                final t = _pulseController.value;
+                final scale = 1.0 + 0.08 * (t < 0.5 ? t * 2 : (1 - t) * 2);
+                return Transform.scale(scale: scale, child: child);
+              },
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: AppGradients.primary,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.35),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.refresh_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+            ),
+            Spacing.verticalMD,
+            Text(
+              l10n.retry,
+              style: AppTextStyles.h4.copyWith(fontWeight: FontWeight.w600),
+            ),
+            Spacing.verticalXS,
+            Text(
+              'Processing...',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            Spacing.verticalMD,
+            SizedBox(
+              width: 100,
+              child: LinearProgressIndicator(
+                color: AppColors.primary,
+                backgroundColor: AppColors.borderLight,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

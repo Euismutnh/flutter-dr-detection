@@ -48,6 +48,7 @@ class ChartLegend extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: Spacing.paddingLG,
+      width: double.maxFinite,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: Spacing.radiusXL,
@@ -76,7 +77,7 @@ class ChartLegend extends StatelessWidget {
 
           // Legend items
           Wrap(
-            spacing: 12,
+            spacing: 15,
             runSpacing: 8,
             children: items.map((item) {
               return Row(

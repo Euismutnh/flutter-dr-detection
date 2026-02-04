@@ -289,7 +289,7 @@ class _PatientListScreenState extends State<PatientListScreen> {
 
   Widget _buildHeader(AppLocalizations l10n) {
     return Padding(
-      padding: Spacing.paddingLG,
+      padding: Spacing. paddingLG,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

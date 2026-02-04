@@ -68,6 +68,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get comingSoon => 'Coming Soon';
   @override
   String get all => 'All';
+  @override
+  String get minAge => 'Min Age';
+  @override
+  String get maxAge => 'Max Age';
+  @override
+  String get clear => 'Clear';
+  @override
+  String get ageRangeError => 'Min age cannot be greater than max age';
+  @override
+  String get reset => 'Reset';
+  @override
+  String get apply => 'Apply';
+  @override
+  String get period => 'Period';
+  @override
+  String get noResultsFound => 'No results found';
 
   // ============================================================================
   // AUTH
@@ -335,14 +351,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errorPhotoRequired => 'Profile photo is required';
-  @override
-  String get minAge => 'Min Age';
-  @override
-  String get maxAge => 'Max Age';
-  @override
-  String get clear => 'Clear';
-  @override
-  String get ageRangeError => 'Min age cannot be greater than max age';
 
   // Add Patient Screen
   @override
@@ -606,6 +614,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get detectedAt => 'Detected At';
+  @override
+  String get detectionDetails => 'Detection Details';
+  @override
+  String get deleteDetection => 'Delete Detection';
+  @override
+  String get deleteDetectionConfirmation =>
+      'Are you sure you want to delete this detection? This action cannot be undone.';
+  @override
+  String get yesDelete => 'Yes, Delete';
+  @override
+  String get deletingDetection => 'Deleting detection...';
+  @override
+  String get successDetectionDeleted => 'Detection deleted successfully';
+  @override
+  String get time => 'Time';
+  @override
+  String get description => 'Description';
 
   // ============================================================================
   // PROFESSIONS

@@ -27,14 +27,10 @@ import 'chart_legend.dart';
 class DetectionProgressChart extends StatefulWidget {
   final List<DetectionModel> detections;
 
-  const DetectionProgressChart({
-    super.key,
-    required this.detections,
-  });
+  const DetectionProgressChart({super.key, required this.detections});
 
   @override
-  State<DetectionProgressChart> createState() =>
-      _DetectionProgressChartState();
+  State<DetectionProgressChart> createState() => _DetectionProgressChartState();
 }
 
 class _DetectionProgressChartState extends State<DetectionProgressChart> {
@@ -113,9 +109,7 @@ class _DetectionProgressChartState extends State<DetectionProgressChart> {
             Spacing.verticalXL,
 
             // Legend
-            ChartLegend.drClassification(
-              title: 'Classification Legend',
-            ),
+            ChartLegend.drClassification(title: 'Classification Legend'),
 
             Spacing.verticalXL,
 
@@ -153,9 +147,7 @@ class _DetectionProgressChartState extends State<DetectionProgressChart> {
             const SizedBox(height: 16),
             Text(
               l10n.noDetectionsInPeriod,
-              style: AppTextStyles.h4.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppTextStyles.h4.copyWith(fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -224,24 +216,29 @@ class _DetectionProgressChartState extends State<DetectionProgressChart> {
               showTitles: true,
               reservedSize: 50,
               getTitlesWidget: (value, meta) {
-                final labels = ChartHelper.getClassificationLabels();
-                if (value.toInt() >= 0 && value.toInt() < labels.length) {
-                  return SideTitleWidget(
-                    meta: meta,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Text(
-                        labels[value.toInt()],
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textSecondary,
-                          fontSize: 10,
-                        ),
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
-                  );
+                if (value % 1 != 0) {
+                  return const SizedBox.shrink();
                 }
-                return const SizedBox();
+
+                final labels = ChartHelper.getClassificationLabels();
+                final index = value.toInt();
+
+                if (index < 0 || index >= labels.length) {
+                  return const SizedBox.shrink();
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(
+                    labels[index],
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                );
               },
             ),
           ),
@@ -254,15 +251,25 @@ class _DetectionProgressChartState extends State<DetectionProgressChart> {
                 if (value.toInt() >= 0 && value.toInt() < detections.length) {
                   final detection = detections[value.toInt()];
                   final date = detection.detectedAt;
-                  
+
                   // Format: "Jan 23" or "Feb 12"
                   const months = [
-                    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+                    'Jan',
+                    'Feb',
+                    'Mar',
+                    'Apr',
+                    'May',
+                    'Jun',
+                    'Jul',
+                    'Aug',
+                    'Sep',
+                    'Oct',
+                    'Nov',
+                    'Dec',
                   ];
                   final monthStr = months[date.month - 1];
                   final dayStr = date.day.toString();
-                  
+
                   return SideTitleWidget(
                     meta: meta,
                     angle: -0.5, // Slight angle for better readability
@@ -293,10 +300,7 @@ class _DetectionProgressChartState extends State<DetectionProgressChart> {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (value) {
-            return FlLine(
-              color: AppColors.borderLight,
-              strokeWidth: 1,
-            );
+            return FlLine(color: AppColors.borderLight, strokeWidth: 1);
           },
         ),
         borderData: FlBorderData(
@@ -333,8 +337,9 @@ class _DetectionProgressChartState extends State<DetectionProgressChart> {
     List<DetectionModel> detections,
     AppLocalizations l10n,
   ) {
-    final avgConfidence =
-        StatsCalculator.calculateAverageConfidence(detections);
+    final avgConfidence = StatsCalculator.calculateAverageConfidence(
+      detections,
+    );
     final breakdown = StatsCalculator.getClassificationBreakdown(detections);
 
     return Container(
@@ -360,15 +365,12 @@ class _DetectionProgressChartState extends State<DetectionProgressChart> {
             ),
           ),
           Spacing.verticalMD,
-          _buildStatRow(
-            l10n.totalDetections,
-            detections.length.toString(),
-          ),
+          _buildStatRow(l10n.totalDetections, detections.length.toString()),
           _buildStatRow(
             'Average Confidence',
             '${avgConfidence.toStringAsFixed(1)}%',
           ),
-          
+
           // Classification Breakdown
           const SizedBox(height: 8),
           const Divider(),

@@ -23,7 +23,7 @@ class DetectionService {
   /// Session berlaku 15 menit
   Future<DetectionPreviewModel> startDetection({
     required String patientCode,
-    required String sideEye, 
+    required String sideEye,
     required MultipartFile image,
   }) async {
     final formData = FormData.fromMap({
@@ -56,11 +56,8 @@ class DetectionService {
       ApiConstants.detectionsSave,
       data: {'session_id': sessionId},
     );
-    final body = response.data;
-    if (body is Map<String, dynamic> && body.containsKey('data')) {
-      return MessageResponse.fromJson(body['data']);
-    }
-    return MessageResponse.fromJson(body);
+
+    return MessageResponse.fromJson(response.data);
   }
 
   /// Cancel detection

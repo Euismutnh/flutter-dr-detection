@@ -45,6 +45,10 @@ abstract class AppLocalizations {
   String get maxAge;
   String get clear;
   String get ageRangeError;
+  String get reset;
+  String get apply;
+  String get period;
+  String get noResultsFound;
 
   // ============================================================================
   // AUTH
@@ -269,6 +273,14 @@ abstract class AppLocalizations {
   String get pleaseUploadAndCropImage;
   String get imageCropTo299;
   String get detectedAt;
+  String get detectionDetails;
+  String get deleteDetection;
+  String get deleteDetectionConfirmation;
+  String get yesDelete;
+  String get deletingDetection;
+  String get successDetectionDeleted;
+  String get time;
+  String get description;
 
   // ============================================================================
   // PROFESSIONS
