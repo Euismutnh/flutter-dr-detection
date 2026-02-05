@@ -46,16 +46,13 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
 
     final provider = Provider.of<DetectionProvider>(context, listen: false);
     final detections = provider.detections ?? [];
-    
-    // Find detection by ID
+
     final detection = detections
         .where((d) => d.id.toString() == widget.detectionId)
         .firstOrNull;
 
     if (detection != null) {
-      setState(() {
-        _detection = detection;
-      });
+      setState(() => _detection = detection);
       provider.setSelectedDetection(detection);
     }
   }
@@ -130,12 +127,7 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
               ),
             ),
             Spacing.horizontalMD,
-            Expanded(
-              child: Text(
-                l10n.confirm,
-                style: AppTextStyles.h4,
-              ),
-            ),
+            Expanded(child: Text(l10n.confirm, style: AppTextStyles.h4)),
           ],
         ),
         content: Text(
@@ -155,9 +147,7 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.danger,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: Spacing.radiusMD,
-              ),
+              shape: RoundedRectangleBorder(borderRadius: Spacing.radiusMD),
             ),
             child: Text(l10n.yesDelete),
           ),
@@ -174,7 +164,6 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
     final navigator = Navigator.of(context);
     final provider = Provider.of<DetectionProvider>(context, listen: false);
 
-    // Show loading
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -190,10 +179,7 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
             children: [
               const CircularProgressIndicator(),
               Spacing.verticalMD,
-              Text(
-                l10n.deletingDetection,
-                style: AppTextStyles.bodyMedium,
-              ),
+              Text(l10n.deletingDetection, style: AppTextStyles.bodyMedium),
             ],
           ),
         ),
@@ -202,12 +188,8 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
 
     try {
       await provider.deleteDetection(_detection!.id);
-
       if (mounted) {
-        // Close loading dialog
         Navigator.of(context).pop();
-
-        // Show success message
         messenger.showSnackBar(
           SnackBar(
             content: Text(l10n.successDetectionDeleted),
@@ -215,18 +197,11 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
-
-        // Navigate back to history
         navigator.pop();
-
-        // History list auto-refreshes because provider removed from cache
       }
     } on ApiException catch (e) {
       if (mounted) {
-        // Close loading dialog
         Navigator.of(context).pop();
-
-        // Show error
         messenger.showSnackBar(
           SnackBar(
             content: Text(e.getTranslatedMessageFromL10n(l10n)),
@@ -237,10 +212,7 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
-        // Close loading dialog
         Navigator.of(context).pop();
-
-        // Show error
         messenger.showSnackBar(
           SnackBar(
             content: Text(l10n.errorUnknown),
@@ -290,37 +262,22 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
               ),
             )
           : SingleChildScrollView(
+              padding: Spacing.paddingLG,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Spacing.verticalLG,
-
-                  // Fundus Image with Zoom
-                  _buildFundusImage(_detection!),
-
-                  Spacing.verticalLG,
-
-                  // Classification Card
-                  _buildClassificationCard(_detection!, l10n)
+                  // PATIENT INFO CARD (ATAS) — Same as Patient Detail
+                  _buildPatientInfoCard(_detection!)
                       .animate()
-                      .fadeIn(delay: 100.ms)
-                      .slideY(begin: 0.05, end: 0),
+                      .fadeIn(duration: 300.ms)
+                      .slideY(begin: -0.05, end: 0),
 
                   Spacing.verticalLG,
 
-                  // Patient Info Card
-                  _buildPatientInfoCard(_detection!, l10n)
-                      .animate()
-                      .fadeIn(delay: 200.ms)
-                      .slideY(begin: 0.05, end: 0),
-
-                  Spacing.verticalLG,
-
-                  // Detection Details Card
-                  _buildDetectionDetailsCard(_detection!, l10n)
-                      .animate()
-                      .fadeIn(delay: 300.ms)
-                      .slideY(begin: 0.05, end: 0),
+                  // DETECTION RESULT CARD — Same as Detection Screen
+                  _buildDetectionResultCard(
+                    _detection!,
+                    l10n,
+                  ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05, end: 0),
 
                   Spacing.verticalXXL,
                 ],
@@ -329,198 +286,110 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
     );
   }
 
-  // ==========================================================================
-  // FUNDUS IMAGE — Full quality with zoom, NO compression
-  // ==========================================================================
-
-  Widget _buildFundusImage(DetectionModel detection) {
-    return Padding(
+  // Patient Info Card — Exact copy from Patient Detail header
+  Widget _buildPatientInfoCard(DetectionModel detection) {
+    return Container(
       padding: Spacing.paddingLG,
-      child: Container(
-        height: 280,
-        decoration: BoxDecoration(
-          borderRadius: Spacing.radiusXL,
-          border: Border.all(color: AppColors.borderLight),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.shadowLight,
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: Spacing.radiusXL,
-          child: InteractiveViewer(
-            minScale: 1.0,
-            maxScale: 4.0,
-            child: CachedNetworkImage(
-              imageUrl: detection.imageUrl,
-              fit: BoxFit.contain, // ← Preserve aspect ratio
-              // NO memCacheWidth/memCacheHeight — keeps original quality!
-              placeholder: (context, url) => Container(
-                color: AppColors.background,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const CircularProgressIndicator(),
-                      Spacing.verticalMD,
-                      Text(
-                        'Loading image...',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: Spacing.radiusXL,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowLight,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          PatientAvatar(
+            name: detection.patientName,
+            gender: detection.patientGender,
+            size: 64,
+          ),
+          Spacing.horizontalMD,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  detection.patientName,
+                  style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Spacing.verticalXXS,
+                Text(
+                  'ID: ${detection.patientCode}',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.textSecondary,
                   ),
                 ),
-              ),
-              errorWidget: (context, url, error) => Container(
-                color: AppColors.background,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.image_not_supported_outlined,
-                        size: 48,
-                        color: AppColors.textDisabled,
-                      ),
-                      Spacing.verticalMD,
-                      Text(
-                        'Failed to load image',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
+                Spacing.verticalXS,
+                Text(
+                  '${detection.patientGender}, ${detection.patientAge} years',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
                   ),
                 ),
-              ),
+              ],
             ),
           ),
-        ),
-      ),
-    ).animate().fadeIn(duration: 300.ms);
-  }
-
-  // ==========================================================================
-  // CLASSIFICATION CARD — Gradient background, same as detection screen result
-  // ==========================================================================
-
-  Widget _buildClassificationCard(
-    DetectionModel detection,
-    AppLocalizations l10n,
-  ) {
-    final classColor = AppColors.getClassificationColor(detection.classification);
-
-    return Padding(
-      padding: Spacing.paddingLG.copyWith(top: 0, bottom: 0),
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(
-          horizontal: Spacing.md + 2,
-          vertical: Spacing.md,
-        ),
-        decoration: BoxDecoration(
-          gradient: AppGradients.getClassificationGradient(detection.classification),
-          borderRadius: Spacing.radiusXL,
-          boxShadow: [
-            BoxShadow(
-              color: classColor.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(Spacing.sm + 2),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: Spacing.radiusMD,
-              ),
-              child: Icon(
-                Icons.health_and_safety_rounded,
-                color: Colors.white,
-                size: Spacing.iconMD - 2,
-              ),
-            ),
-            Spacing.horizontalMD,
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    detection.predictedLabel,
-                    style: AppTextStyles.h3.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      height: 1.1,
-                    ),
-                  ),
-                  Spacing.verticalXXS,
-                  Text(
-                    '${(detection.confidence * 100).toStringAsFixed(1)}% confidence',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
 
-  // ==========================================================================
-  // PATIENT INFO CARD — Same structure as Patient Detail header
-  // ==========================================================================
-
-  Widget _buildPatientInfoCard(
+  // Detection Result Card — Same structure as Detection Screen result section
+  Widget _buildDetectionResultCard(
     DetectionModel detection,
     AppLocalizations l10n,
   ) {
-    return Padding(
-      padding: Spacing.paddingLG.copyWith(top: 0, bottom: 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(left: Spacing.sm),
-            child: Text(
-              l10n.patientInformation,
-              style: AppTextStyles.labelLarge.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
+    final classColor = AppColors.getClassificationColor(
+      detection.classification,
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: Spacing.radiusXL,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowLight,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-          Spacing.verticalMD,
+        ],
+      ),
+      child: Column(
+        children: [
+          // Header Banner — Gradient
           Container(
-            padding: Spacing.paddingLG,
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(
+              horizontal: Spacing.md + 2,
+              vertical: Spacing.md,
+            ),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: Spacing.radiusXL,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.shadowLight,
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              gradient: AppGradients.getClassificationGradient(
+                detection.classification,
+              ),
+              borderRadius: Spacing.customRadius(topLeft: 20, topRight: 20),
             ),
             child: Row(
               children: [
-                PatientAvatar(
-                  name: detection.patientName,
-                  gender: detection.patientGender,
-                  size: 56,
+                Container(
+                  padding: EdgeInsets.all(Spacing.sm + 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: Spacing.radiusMD,
+                  ),
+                  child: Icon(
+                    Icons.medical_services_rounded,
+                    color: Colors.white,
+                    size: Spacing.iconMD - 2,
+                  ),
                 ),
                 Spacing.horizontalMD,
                 Expanded(
@@ -528,25 +397,19 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        detection.patientName,
-                        style: AppTextStyles.h4.copyWith(
-                          fontWeight: FontWeight.bold,
+                        l10n.detectionResult,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontWeight: FontWeight.w500,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       Spacing.verticalXXS,
                       Text(
-                        'ID: ${detection.patientCode}',
-                        style: AppTextStyles.labelMedium.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      Spacing.verticalXS,
-                      Text(
-                        '${detection.patientGender}, ${detection.patientAge} years',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textSecondary,
+                        detection.predictedLabel,
+                        style: AppTextStyles.h3.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          height: 1.1,
                         ),
                       ),
                     ],
@@ -555,76 +418,123 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
 
-  // ==========================================================================
-  // DETECTION DETAILS CARD — Info rows with icons
-  // ==========================================================================
-
-  Widget _buildDetectionDetailsCard(
-    DetectionModel detection,
-    AppLocalizations l10n,
-  ) {
-    return Padding(
-      padding: Spacing.paddingLG.copyWith(top: 0, bottom: 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+          // Body
           Padding(
-            padding: EdgeInsets.only(left: Spacing.sm),
-            child: Text(
-              l10n.detectionDetails,
-              style: AppTextStyles.labelLarge.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          Spacing.verticalMD,
-          Container(
             padding: Spacing.paddingLG,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: Spacing.radiusXL,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.shadowLight,
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Fundus Image with Zoom
+                Container(
+                  height: 180,
+                  decoration: BoxDecoration(
+                    borderRadius: Spacing.radiusMD,
+                    border: Border.all(color: AppColors.borderLight),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: Spacing.radiusMD,
+                    child: InteractiveViewer(
+                      minScale: 1.0,
+                      maxScale: 4.0,
+                      child: CachedNetworkImage(
+                        imageUrl: detection.imageUrl,
+                        fit: BoxFit.contain,
+                        placeholder: (context, url) => Container(
+                          color: AppColors.background,
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: AppColors.background,
+                          child: Center(
+                            child: Icon(
+                              Icons.image_not_supported_outlined,
+                              size: 48,
+                              color: AppColors.textDisabled,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Spacing.verticalLG,
+
+                // Classification Badge — Left-border card style
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Spacing.sm + 4,
+                    vertical: Spacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: Spacing.radiusMD,
+                    border: Border(
+                      left: BorderSide(color: classColor, width: 4),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.shadowLight,
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.local_hospital_rounded,
+                        color: classColor,
+                        size: 20,
+                      ),
+                      Spacing.horizontalSM,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            detection.predictedLabel,
+                            style: AppTextStyles.h3.copyWith(
+                              color: classColor,
+                              fontWeight: FontWeight.w700,
+                              height: 1.0,
+                            ),
+                          ),
+                          Spacing.verticalXXS,
+                          Text(
+                            '${(detection.confidence * 100).toStringAsFixed(1)}% confidence',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                Spacing.verticalLG,
+
+                // Info rows
                 _buildInfoRow(
-                  Icons.visibility_rounded,
+                  l10n.confidence,
+                  '${(detection.confidence * 100).toStringAsFixed(1)}%',
+                  Icons.verified_rounded,
+                ),
+                _buildInfoRow(
                   l10n.sideEye,
                   detection.sideEye == 'Right' ? l10n.rightEye : l10n.leftEye,
+                  Icons.visibility_rounded,
                 ),
-                Spacing.verticalMD,
                 _buildInfoRow(
-                  Icons.calendar_today_rounded,
                   l10n.detectedAt,
-                  Helpers.formatDate(detection.detectedAt),
-                ),
-                Spacing.verticalMD,
-                _buildInfoRow(
-                  Icons.access_time_rounded,
-                  l10n.time,
                   Helpers.formatDateTime(detection.detectedAt),
+                  Icons.access_time_rounded,
                 ),
-                if (detection.description != null &&
-                    detection.description!.isNotEmpty) ...[
-                  Spacing.verticalMD,
-                  _buildInfoRow(
-                    Icons.notes_rounded,
-                    l10n.description,
-                    detection.description!,
-                  ),
-                ],
+
               ],
             ),
           ),
@@ -633,46 +543,42 @@ class _DetectionDetailScreenState extends State<DetectionDetailScreen> {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: Spacing.radiusSM,
+  Widget _buildInfoRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: Spacing.sm - 2),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: Spacing.radiusSM,
+            ),
+            child: Icon(icon, size: 17, color: AppColors.textSecondary),
           ),
-          child: Icon(
-            icon,
-            size: 18,
-            color: AppColors.textSecondary,
+          Spacing.horizontalSM,
+          Text(
+            label,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: AppColors.textSecondary,
+            ),
           ),
-        ),
-        Spacing.horizontalSM,
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+          const Spacer(),
+          Expanded(
+            child: Text(
+              value,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
-              Spacing.verticalXXS,
-              Text(
-                value,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+              textAlign: TextAlign.right,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
